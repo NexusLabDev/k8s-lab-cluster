@@ -1,0 +1,39 @@
+# The lab cluster itself. This is the only layer that is not GitOps-managed:
+# something has to exist before Argo CD can run. Everything above it comes from
+# k8s-lab-platform-infra.
+#
+# Topology: 1 control-plane + 1 worker. kind taints the control-plane as soon
+# as a worker exists, so every workload lands on the single worker. See
+# docs/scale-to-two-workers.md for the second worker.
+#
+# No extraPortMappings here on purpose: the gateways are published by the edge
+# load balancer (edge-lb/), which stands in for the cloud LB a real cluster
+# would get. Port mappings would pin the ingress path to one node and would
+# have to be rewritten every time the topology changes.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: k8s-lab
+
+networking:
+  # kindnet stays on. Istio ambient runs on top of it via istio-cni; it does
+  # not replace the CNI, it only installs the redirection rules.
+  disableDefaultCNI: false
+  kubeProxyMode: iptables
+  # Bind the API server to loopback only; kubectl reaches it through gvproxy.
+  apiServerAddress: "127.0.0.1"
+
+nodes:
+  - role: control-plane
+    # Ambient needs conntrack and netfilter state the kubelet can see; kind's
+    # defaults are fine, but the label makes the intent explicit in `get nodes`.
+    labels:
+      k8s-lab.io/role: control-plane
+
+  - role: worker
+    labels:
+      k8s-lab.io/role: worker
+    # Uncomment to add the second worker. Adding a node to a running kind
+    # cluster is not supported -- this is a recreate. See the doc above.
+  # - role: worker
+  #   labels:
+  #     k8s-lab.io/role: worker

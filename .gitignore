@@ -1,0 +1,6 @@
+# The lab root CA, exported by scripts/trust-ca.sh. Regenerated per cluster.
+.lab-ca.crt
+
+# The corporate TLS-inspection CA, extracted from the local keychain.
+# Machine-specific; scripts/corp-ca.sh regenerates it.
+pki/corp-ca.crt
