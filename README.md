@@ -33,7 +33,7 @@ choose them. Changing either side without the other breaks ingress.
 ```bash
 scripts/up.sh                                    # cluster + edge LB
 cd ../k8s-lab-platform-infra && bootstrap/install.sh   # Argo CD, then Git owns it
-cd ../k8s-lab-cluster && scripts/trust-ca.sh     # once the pki app has synced
+cd ../k8s-lab-cluster && scripts/trust-ca.sh --install # once the pki app has synced
 ```
 
 Verify:
@@ -43,6 +43,9 @@ curl --cacert .lab-ca.crt https://hello.apps.localhost:8443/hello
 curl --cacert .lab-ca.crt https://tools.internal.localhost:9443/hello
 open https://argocd.internal.localhost:9443
 ```
+
+`--install` trusts the lab CA system-wide, which is what browsers need; plain
+`trust-ca.sh` only writes the file for `curl --cacert`. Both are safe to re-run.
 
 Tear it down with `scripts/down.sh`.
 
@@ -119,7 +122,9 @@ podman machine start
 |---|---|
 | `curl: (7) connection refused` on 8443 | edge LB down — `scripts/edge-lb.sh status` |
 | Backends `DOWN` at :8404 | node names stale after a restart — `edge-lb.sh restart` |
-| `curl: (60)` certificate error | lab CA not exported/trusted — `scripts/trust-ca.sh` |
+| `curl: (60)` certificate error | lab CA not exported — `scripts/trust-ca.sh` |
+| Browser cert error, `curl --cacert` fine | lab CA not in the keychain — `scripts/trust-ca.sh --install` |
+| Browser cert error *after* a cluster recreate | keychain holds the previous cluster's root — `trust-ca.sh --install` replaces it |
 | `ImagePullBackOff` with `x509: certificate signed by unknown authority` | nodes don't trust the corporate CA — `scripts/corp-ca.sh` |
 | Argo CD repo-server can't clone from GitHub | same corporate CA, inside the cluster — see the doc above |
 | 404 from the gateway | route attached, hostname wrong, or namespace missing its `gateway-access/*` label |

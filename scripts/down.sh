@@ -19,3 +19,8 @@ if cluster_exists; then
 else
   info "cluster '$CLUSTER_NAME' is not present"
 fi
+
+# The lab CA dies with the cluster; leaving it trusted is a dangling root.
+if security find-certificate -c "k8s-lab Root CA" /Library/Keychains/System.keychain >/dev/null 2>&1; then
+  warn "'k8s-lab Root CA' is still trusted system-wide; remove it with scripts/trust-ca.sh --uninstall"
+fi
