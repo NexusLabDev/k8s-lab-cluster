@@ -53,7 +53,7 @@ cat <<EOF
 
 Cluster is up. Nothing is deployed on it yet.
 
-  next   cd ../k8s-lab-platform-infra && bootstrap/install.sh
+  next   cd ../platform-infra && bootstrap/install.sh
   ui     https://argocd.internal.localhost:9443
   apps   https://hello.apps.localhost:8443/hello
          https://tools.internal.localhost:9443/hello

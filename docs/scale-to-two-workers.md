@@ -43,7 +43,7 @@ Then:
 ```bash
 scripts/down.sh
 scripts/up.sh
-cd ../k8s-lab-platform-infra && bootstrap/install.sh
+cd ../platform-infra && bootstrap/install.sh
 cd ../k8s-lab-cluster && scripts/trust-ca.sh   # the CA is regenerated
 ```
 

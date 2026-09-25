@@ -34,7 +34,7 @@ chart *are* the laptop ports.
 
 ```bash
 scripts/up.sh                                    # cluster + load balancer
-cd ../k8s-lab-platform-infra && bootstrap/install.sh   # Argo CD, then Git owns it
+cd ../platform-infra && bootstrap/install.sh           # Argo CD, then Git owns it
 cd ../k8s-lab-cluster && scripts/trust-ca.sh --install # once the pki app has synced
 ```
 
