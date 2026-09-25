@@ -53,12 +53,15 @@ cat <<EOF
 
 Cluster is up. Nothing is deployed on it yet.
 
-  next   cd ../platform-infra && bootstrap/install.sh
+  next   1. cd ../platform-infra && bootstrap/install.sh
+         2. cd ../k8s-lab-cluster && scripts/trust-ca.sh --install
+            (once the pki app is Healthy; asks for sudo)
   ui     https://argocd.internal.localhost:9443
   apps   https://hello.apps.localhost:8443/hello
          https://tools.internal.localhost:9443/hello
   lb     scripts/lb.sh status
 
-Certificates are signed by the lab's own CA, so clients will not trust them
-until you run scripts/trust-ca.sh (or pass curl -k).
+Every cluster gets a new lab CA with the same name, so a browser that trusted
+a previous cluster rejects this one until step 2 replaces it. Plain
+scripts/trust-ca.sh only writes .lab-ca.crt for curl --cacert.
 EOF
