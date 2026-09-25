@@ -35,8 +35,8 @@ helm pull --repo https://charts.jetstack.io cert-manager
 ```
 
 That one stalls the whole lab: cert-manager is sync-wave −7, so pki (−5) and
-platform-gateway (−3) never run, no NodePorts exist, and every edge LB backend
-sits `DOWN`. The visible symptom is "I can't reach the Argo CD URL", three
+platform-gateway (−3) never run, no gateway Services exist, and
+`scripts/lb.sh status` shows no load balancers. The visible symptom is "I can't reach the Argo CD URL", three
 layers away from the cause.
 
 ## How the CA is found

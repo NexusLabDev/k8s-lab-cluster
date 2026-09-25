@@ -4,17 +4,33 @@
 # kind talks to podman, not docker.
 export KIND_EXPERIMENTAL_PROVIDER=podman
 
-CLUSTER_NAME=k8s-lab
-EDGE_LB_NAME=k8s-lab-edge-lb
-EDGE_LB_IMAGE=docker.io/library/haproxy:3.0-alpine
-# kind creates and owns this podman network; the edge LB joins it so it can
-# resolve node containers by name.
-KIND_NETWORK=kind
-
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Ports published on the laptop, mirroring edge-lb/haproxy.cfg.
-EDGE_LB_PORTS=(8443 8080 9443 9080 8404)
+# The lab's own registries config, never the user-wide one. See the file.
+export CONTAINERS_REGISTRIES_CONF="$REPO_ROOT/podman/registries.conf"
+
+CLUSTER_NAME=k8s-lab
+# kind creates and owns this podman network; the controller joins it so it can
+# reach the API server by node name.
+KIND_NETWORK=kind
+
+# cloud-provider-kind: turns Services of type LoadBalancer into Envoy containers
+# that publish the Service ports on the laptop. Run as a container inside the
+# podman VM -- the macOS binary refuses to start without sudo.
+CCM_NAME=k8s-lab-ccm
+CCM_IMAGE=registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v0.11.1
+CCM_ARGS=(
+  # Istio is the only Gateway API implementation in the lab.
+  --gateway-channel disabled
+  --enable-default-ingress=false
+  # Publish LB ports on the host; the nodes' IPs are unreachable from macOS.
+  --enable-lb-port-mapping
+)
+# The VM's rootful podman socket, mounted as the controller's docker socket.
+# The path is inside the podman VM, not on the Mac.
+PODMAN_SOCKET=/run/podman/podman.sock
+# Label cloud-provider-kind puts on the Envoy containers it creates.
+CCM_LB_LABEL="io.x-k8s.cloud-provider-kind.cluster=$CLUSTER_NAME"
 
 info()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn()  { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
@@ -32,6 +48,6 @@ cluster_exists() {
   kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"
 }
 
-edge_lb_exists() {
-  podman container exists "$EDGE_LB_NAME"
+ccm_exists() {
+  podman container exists "$CCM_NAME"
 }

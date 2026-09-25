@@ -2,8 +2,12 @@
 # Create the lab cluster and publish its gateways on the laptop.
 #
 # This script owns the two things GitOps cannot own: the cluster itself and the
-# edge load balancer. Everything else is Argo CD's job -- see the "next steps"
-# printed at the end.
+# load balancer controller. Everything else is Argo CD's job -- see the "next
+# steps" printed at the end.
+#
+# The controller must be running before the bootstrap: the platform gateways
+# are LoadBalancer Services, and a gateway without an address never turns
+# Healthy, which stalls every Argo CD sync wave after it.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -43,7 +47,7 @@ create_cluster() {
 preflight
 create_cluster
 "$REPO_ROOT/scripts/corp-ca.sh"
-"$REPO_ROOT/scripts/edge-lb.sh" start
+"$REPO_ROOT/scripts/lb.sh" start
 
 cat <<EOF
 
@@ -53,7 +57,7 @@ Cluster is up. Nothing is deployed on it yet.
   ui     https://argocd.internal.localhost:9443
   apps   https://hello.apps.localhost:8443/hello
          https://tools.internal.localhost:9443/hello
-  lb     http://localhost:8404
+  lb     scripts/lb.sh status
 
 Certificates are signed by the lab's own CA, so clients will not trust them
 until you run scripts/trust-ca.sh (or pass curl -k).

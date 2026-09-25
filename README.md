@@ -1,7 +1,7 @@
 # k8s-lab-cluster
 
 Owned by **platform-team**. The bottom layer of the lab: the kind cluster and
-the edge load balancer that publishes its gateways on the laptop.
+the load balancer that publishes its gateways on the laptop.
 
 This is the only repo in the lab that is **not** GitOps-managed, for the
 obvious reason that something has to exist before Argo CD can run. It is two
@@ -9,29 +9,31 @@ scripts and two config files, and nothing that runs *on* the cluster belongs
 here.
 
 ```
-kind/cluster.yaml     node topology
-edge-lb/haproxy.cfg   host ports -> gateway NodePorts
-scripts/              up, down, edge-lb, corp-ca, trust-ca
-docs/                 scale-to-two-workers, corporate-tls-interception
+kind/cluster.yaml         node topology
+podman/registries.conf    the lab's registries config (the user-wide one is never read)
+scripts/                  up, down, lb, corp-ca, trust-ca
+docs/                     scale-to-two-workers, corporate-tls-interception
 ```
 
 ## The contract
 
-The gateway NodePorts are pinned by the `platform-gateway` chart in
-`k8s-lab-platform-infra`. This repo only publishes them; it does not get to
-choose them. Changing either side without the other breaks ingress.
+The gateways are `LoadBalancer` Services whose ports are set by the
+`platform-gateway` chart in `k8s-lab-platform-infra`. This repo runs the load
+balancer that publishes them; it does not get to choose them. The load
+balancer publishes each Service port 1:1 on the laptop, so the ports in the
+chart *are* the laptop ports.
 
-| Gateway | Hostnames | NodePort https/http | Host port | Redirect target |
-|---|---|---|---|---|
-| `public` | `*.apps.localhost` | 30443 / 30080 | 8443 / 8080 | 8443 |
-| `internal` | `*.internal.localhost` | 31443 / 31080 | 9443 / 9080 | 9443 |
+| Gateway | Hostnames | Service = host port https/http | Redirect target |
+|---|---|---|---|
+| `public` | `*.apps.localhost` | 8443 / 8080 | 8443 |
+| `internal` | `*.internal.localhost` | 9443 / 9080 | 9443 |
 
 `*.localhost` resolves to the local machine without DNS or `/etc/hosts`.
 
 ## Bring the lab up
 
 ```bash
-scripts/up.sh                                    # cluster + edge LB
+scripts/up.sh                                    # cluster + load balancer
 cd ../k8s-lab-platform-infra && bootstrap/install.sh   # Argo CD, then Git owns it
 cd ../k8s-lab-cluster && scripts/trust-ca.sh --install # once the pki app has synced
 ```
@@ -49,25 +51,43 @@ open https://argocd.internal.localhost:9443
 
 Tear it down with `scripts/down.sh`.
 
-## Why an edge LB and not `extraPortMappings`
+## Why cloud-provider-kind, and not `extraPortMappings`
 
-kind can publish a node's ports directly, which would need no proxy at all.
-It is rejected here for one reason: it binds the ingress path to a *named
-node*. The moment the topology changes the mapping is wrong, and it models
-something no real cluster does — production traffic arrives at a load
-balancer, not at a node.
+kind can publish a node's ports directly, which would need nothing else. It is
+rejected here because it binds the ingress path to a *named node*: the moment
+the topology changes the mapping is wrong, and it models something no real
+cluster does. Production traffic arrives at a load balancer, not at a node.
 
-HAProxy is `mode tcp` throughout. The Istio gateways terminate TLS and route
-on SNI, so the edge must pass bytes through untouched; terminating here would
-break both the certificate chain and hostname routing.
+[cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind)
+is the kind project's cloud controller. It gives the gateways the same shape
+they would have on EKS -- `type: LoadBalancer`, with an address in
+`status.loadBalancer` -- by starting one Envoy container (`kindccm-*`) per
+LoadBalancer Service. Every Ready node is a backend, and nodes that join later
+are added on their own. TLS passes through untouched to the Istio gateways,
+which terminate it.
 
-Both nodes are backends even though only the worker runs gateway pods.
-NodePorts answer on every node (`externalTrafficPolicy: Cluster`), so the
-control-plane forwards to the worker, and the edge LB survives losing either
-one. `http://localhost:8404` shows which backends are up.
+Three things about running it on podman on macOS, all found the hard way:
 
-HAProxy resolves node names once at startup, so **after anything recreates a
-node container, run `scripts/edge-lb.sh restart`**.
+- **It runs as a container, not the Homebrew binary.** The macOS binary
+  refuses to start without `sudo`. Inside the podman VM it is Linux and needs
+  no root on the Mac. `scripts/lb.sh` runs it as `k8s-lab-ccm`.
+- **SELinux.** The podman VM enforces SELinux, which denies the container the
+  podman socket; the controller then fails with "no supported container
+  runtime found". `lb.sh` runs it with `--security-opt label=disable`.
+- **Every LoadBalancer needs its own ports.** Each load balancer binds its
+  Service ports on the laptop, so two Services on the same port can't both
+  exist; the second stays `<pending>`. That is why the gateways listen on
+  8443/8080 and 9443/9080 instead of both on 443/80.
+
+It also runs with Gateway API and its default ingress **disabled**: Istio is the
+lab's Gateway API implementation, and a second one would fight it for the
+CRDs. And it serves *every* kind cluster on the machine, not only this one, so
+its log shows errors for any other cluster that is stopped. Those are harmless.
+
+**The load balancer has to be running before the bootstrap.** Istio marks a
+Gateway `Programmed` only once its Service has an address. Without the
+controller the `platform-gateway` app never turns Healthy, and Argo CD's wave
+gate holds back everything after it. `scripts/up.sh` starts it for you.
 
 ## Topology
 
@@ -105,6 +125,7 @@ repo-server; no certificate is committed. See
 |---|---|
 | podman | 6.1.2, machine rootful |
 | kind | 0.33 |
+| cloud-provider-kind | v0.11.1, as a container (pulled by `lb.sh`) |
 | kubectl, helm | any recent |
 
 The full stack (ambient Istio, Argo CD, 2 gateway replicas, 4 app pods) is
@@ -120,8 +141,9 @@ podman machine start
 
 | Symptom | Cause |
 |---|---|
-| `curl: (7) connection refused` on 8443 | edge LB down — `scripts/edge-lb.sh status` |
-| Backends `DOWN` at :8404 | node names stale after a restart — `edge-lb.sh restart` |
+| `curl: (7) connection refused` on 8443 | load balancer down — `scripts/lb.sh status` |
+| Gateway Service EXTERNAL-IP `<pending>`, `platform-gateway` stuck Progressing | controller not running — `scripts/lb.sh status`, then `lb.sh restart` |
+| Second gateway `<pending>`, first fine | two LoadBalancer Services share a port — give each its own `ports` in the chart |
 | `curl: (60)` certificate error | lab CA not exported — `scripts/trust-ca.sh` |
 | Browser cert error, `curl --cacert` fine | lab CA not in the keychain — `scripts/trust-ca.sh --install` |
 | Browser cert error *after* a cluster recreate | keychain holds the previous cluster's root — `trust-ca.sh --install` replaces it |

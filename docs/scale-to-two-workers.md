@@ -47,16 +47,15 @@ cd ../k8s-lab-platform-infra && bootstrap/install.sh
 cd ../k8s-lab-cluster && scripts/trust-ca.sh   # the CA is regenerated
 ```
 
-## Step 2 — add the backend to the edge LB
+## Step 2 — nothing to do for the load balancer
 
-Uncomment the four `worker2` lines in
-[`../edge-lb/haproxy.cfg`](../edge-lb/haproxy.cfg) — one per frontend — then:
+cloud-provider-kind adds every Ready node to each load balancer's backends on
+its own, so the new worker starts taking gateway traffic as soon as it joins.
+Check both gateways still have an address and their ports:
 
 ```bash
-scripts/edge-lb.sh restart
+scripts/lb.sh status
 ```
-
-Confirm three backends are `UP` per pool at `http://localhost:8404`.
 
 ## Step 3 — make the gateway actually spread
 

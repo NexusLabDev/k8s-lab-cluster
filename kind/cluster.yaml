@@ -6,10 +6,10 @@
 # as a worker exists, so every workload lands on the single worker. See
 # docs/scale-to-two-workers.md for the second worker.
 #
-# No extraPortMappings here on purpose: the gateways are published by the edge
-# load balancer (edge-lb/), which stands in for the cloud LB a real cluster
-# would get. Port mappings would pin the ingress path to one node and would
-# have to be rewritten every time the topology changes.
+# No extraPortMappings here on purpose: the gateways are LoadBalancer Services,
+# published by cloud-provider-kind (scripts/lb.sh), which stands in for the
+# cloud LB a real cluster would get. Port mappings would pin the ingress path to
+# one node and would have to be rewritten every time the topology changes.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: k8s-lab
