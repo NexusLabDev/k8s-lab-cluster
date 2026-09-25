@@ -77,7 +77,9 @@ Three things about running it on podman on macOS, all found the hard way:
 - **Every LoadBalancer needs its own ports.** Each load balancer binds its
   Service ports on the laptop, so two Services on the same port can't both
   exist; the second stays `<pending>`. That is why the gateways listen on
-  8443/8080 and 9443/9080 instead of both on 443/80.
+  8443/8080 and 9443/9080 instead of both on 443/80 -- and why the chart
+  removes Istio's health port 15021, which Istio adds to *every* gateway
+  Service (`hideStatusPort` in the platform-gateway chart).
 
 It also runs with Gateway API and its default ingress **disabled**: Istio is the
 lab's Gateway API implementation, and a second one would fight it for the
@@ -143,7 +145,7 @@ podman machine start
 |---|---|
 | `curl: (7) connection refused` on 8443 | load balancer down — `scripts/lb.sh status` |
 | Gateway Service EXTERNAL-IP `<pending>`, `platform-gateway` stuck Progressing | controller not running — `scripts/lb.sh status`, then `lb.sh restart` |
-| Second gateway `<pending>`, first fine | two LoadBalancer Services share a port — give each its own `ports` in the chart |
+| Second gateway `<pending>`, first fine, its `kindccm-*` container stuck `Created` | two LoadBalancer Services share a port (check 15021 too) — give each its own ports, then `lb.sh restart` |
 | `curl: (60)` certificate error | lab CA not exported — `scripts/trust-ca.sh` |
 | Browser cert error, `curl --cacert` fine | lab CA not in the keychain — `scripts/trust-ca.sh --install` |
 | Browser cert error *after* a cluster recreate | keychain holds the previous cluster's root — `trust-ca.sh --install` replaces it |

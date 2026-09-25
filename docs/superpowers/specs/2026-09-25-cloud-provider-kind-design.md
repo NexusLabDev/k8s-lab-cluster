@@ -131,3 +131,16 @@ Service's type and ports.
   and `https://tools.internal.localhost:9443/hello`;
   `https://argocd.internal.localhost:9443` loads;
   `curl -I http://hello.apps.localhost:8080/hello` → 301 to `:8443`.
+
+## Found during rollout
+
+- Istio adds its health port **15021** to every gateway Service, so the two
+  gateways collided on it even with unique listener ports: `internal` got it,
+  `public` stayed `<pending>` (`AddressNotAssigned`) and wave −3 stalled.
+  Fix: `hideStatusPort: true` makes the options ConfigMap patch the Service
+  with `- port: 15021` / `$patch: delete` (Istio merges it as a strategic
+  merge patch; verified on a scratch Gateway, pod probes unaffected).
+  The spike missed this because it used plain Services.
+- `lb.sh`'s readiness check used `grep -q` under `pipefail`, so it reported a
+  timeout even though the controller connected in 1 s. Fixed.
+
